@@ -107,3 +107,101 @@ func TestTimingWheel_DuplicateID_ReplacesOldTimer(t *testing.T) {
 		t.Errorf("expected 'second' to fire, got %q", fired[0])
 	}
 }
+
+func TestTimingWheel_Remove_RemovesTimer(t *testing.T) {
+	interval := 10 * time.Millisecond
+	numSlots := 100
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	id := taskwheel.TimerID("remove-me")
+
+	_, err := tw.AfterTimeout(id, "bye", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	ok := tw.Remove(id)
+	if !ok {
+		t.Fatalf("expected Remove to return true")
+	}
+
+	for i := 0; i < 10; i++ {
+		if timers := tw.Tick(); len(timers) != 0 {
+			t.Fatalf("expected no timers to fire, got %+v", timers)
+		}
+	}
+
+	ok = tw.Remove(id)
+	if ok {
+		t.Fatalf("expected Remove to return false on second call")
+	}
+}
+
+func TestTimingWheel_Len(t *testing.T) {
+	interval := 10 * time.Millisecond
+	numSlots := 100
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+
+	if got := tw.Len(); got != 0 {
+		t.Fatalf("expected Len() == 0, got %d", got)
+	}
+
+	_, err := tw.AfterTimeout("foo", "val1", 20*time.Millisecond)
+	if err != nil {
+		t.Fatalf("AfterTimeout error: %v", err)
+	}
+	_, err = tw.AfterTimeout("bar", "val2", 30*time.Millisecond)
+	if err != nil {
+		t.Fatalf("AfterTimeout error: %v", err)
+	}
+
+	if got := tw.Len(); got != 2 {
+		t.Fatalf("expected Len() == 2, got %d", got)
+	}
+
+	tw.Remove("foo")
+	if got := tw.Len(); got != 1 {
+		t.Fatalf("expected Len() == 1 after remove, got %d", got)
+	}
+}
+
+func TestTimingWheel_Get(t *testing.T) {
+	interval := 10 * time.Millisecond
+	numSlots := 100
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+
+	id := taskwheel.TimerID("unique-id")
+	val := "payload"
+
+	if _, ok := tw.Get(id); ok {
+		t.Fatal("expected Get to return false for missing timer")
+	}
+
+	_, err := tw.AfterTimeout(id, val, 40*time.Millisecond)
+	if err != nil {
+		t.Fatalf("AfterTimeout error: %v", err)
+	}
+
+	timer, ok := tw.Get(id)
+	if !ok {
+		t.Fatal("expected Get to find the timer, got false")
+	}
+	if timer.ID != id || timer.Value != val {
+		t.Errorf("Get returned wrong timer: got %+v", timer)
+	}
+
+	tw.Remove(id)
+	if _, ok := tw.Get(id); ok {
+		t.Fatal("expected Get to return false after removal")
+	}
+}
+
+func TestTimingWheel_Reset(t *testing.T) {
+	tw := taskwheel.NewTimingWheel[string](10*time.Millisecond, 10)
+	tw.AfterTimeout("a", "A", 10*time.Millisecond)
+	tw.AfterTimeout("b", "B", 20*time.Millisecond)
+
+	tw.Reset()
+	if tw.Len() != 0 {
+		t.Fatalf("expected Len()==0 after Reset, got %d", tw.Len())
+	}
+}

@@ -13,7 +13,6 @@ type TimerID string
 
 // Timer is scheduled event managed by a Timing Wheel.
 // It's support generic payload type [T].
-// The event can be one-shot or periodic.
 type Timer[T any] struct {
 	ID    TimerID
 	Value T
@@ -103,6 +102,38 @@ func (tw *TimingWheel[T]) add(id TimerID, value T, timeout time.Duration) (*Time
 	return timer, nil
 }
 
+// Remove deletes a timer by its ID.
+// Returns true if the timer was found and removed, false if not present.
+func (tw *TimingWheel[T]) Remove(id TimerID) bool {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	timer, ok := tw.timerMap[id]
+	if !ok {
+		return false
+	}
+	if timer.element != nil {
+		tw.slots[timer.slot].Remove(timer.element)
+	}
+	delete(tw.timerMap, id)
+	return true
+}
+
+// Len returns the number of currently scheduled timers.
+func (tw *TimingWheel[T]) Len() int {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	return len(tw.timerMap)
+}
+
+// Get returns the timer for the given ID if present.
+func (tw *TimingWheel[T]) Get(id TimerID) (*Timer[T], bool) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	timer, ok := tw.timerMap[id]
+	return timer, ok
+}
+
 // Tick advances the wheel by one slot and returns all timers due at this tick.
 func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 	tw.mu.Lock()
@@ -125,4 +156,21 @@ func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 	}
 
 	return dueTimers
+}
+
+// Reset removes all timers and reset the timing wheel state.
+func (tw *TimingWheel[T]) Reset() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	for slot := range tw.slots {
+		slotList := &tw.slots[slot]
+		for e := slotList.Front(); e != nil; {
+			next := e.Next()
+			slotList.Remove(e)
+			e = next
+		}
+	}
+	tw.timerMap = make(map[TimerID]*Timer[T])
+	tw.currentSlot = 0
 }
