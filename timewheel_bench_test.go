@@ -1,7 +1,10 @@
 package taskwheel_test
 
 import (
+	"context"
 	"fmt"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,5 +72,75 @@ func BenchmarkNativeTimer_Memory(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+const (
+	numTimers          = 100_000
+	benchmarkDuration  = 200 * time.Millisecond
+	baseTickerInterval = 50 * time.Millisecond
+)
+
+func BenchmarkTimingWheelPeriodic(b *testing.B) {
+	interval := 10 * time.Millisecond
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), benchmarkDuration)
+		defer cancel()
+
+		tw := taskwheel.NewTimingWheel[string](interval, 200)
+
+		for j := 0; j < numTimers; j++ {
+			id := taskwheel.TimerID(strconv.Itoa(j))
+			_, _ = tw.AfterTimeout(id, "payload", baseTickerInterval)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					due := tw.Tick()
+					for _, timer := range due {
+						_, _ = tw.AfterTimeout(timer.ID, timer.Value, baseTickerInterval)
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		wg.Wait()
+	}
+}
+
+func BenchmarkGoroutinePerTimer(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), benchmarkDuration)
+		defer cancel()
+
+		var wg sync.WaitGroup
+		wg.Add(numTimers)
+
+		for j := 0; j < numTimers; j++ {
+			go func() {
+				defer wg.Done()
+				ticker := time.NewTicker(baseTickerInterval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
 	}
 }
