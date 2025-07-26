@@ -1,7 +1,6 @@
 package taskwheel
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"sync"
@@ -18,10 +17,49 @@ type Timer[T any] struct {
 	Value T
 	// NextDue is the wall clock when this timer should be fired.
 	NextDue time.Time
-	element *list.Element
 
+	prev, next *Timer[T]
 	// Index of the slot ()
 	slot int
+}
+
+type slotList[T any] struct {
+	head, tail *Timer[T]
+}
+
+func (sl *slotList[T]) push(t *Timer[T]) {
+	t.next = nil
+	t.prev = sl.tail
+	if sl.head == nil {
+		sl.head = t
+	} else {
+		sl.tail.next = t
+	}
+	sl.tail = t
+}
+
+func (sl *slotList[T]) remove(t *Timer[T]) {
+	if t == nil {
+		return
+	}
+	if t.prev == nil {
+		sl.head = t.next
+	} else {
+		t.prev.next = t.next
+	}
+
+	if t.next == nil {
+		sl.tail = t.prev
+	} else {
+		t.next.prev = t.prev
+	}
+
+	t.next = nil
+	t.prev = nil
+}
+
+func (sl *slotList[T]) front() *Timer[T] {
+	return sl.head
 }
 
 // TimingWheel is a thread safe timing wheel data structure, that manages a large number of timers
@@ -29,7 +67,7 @@ type Timer[T any] struct {
 type TimingWheel[T any] struct {
 	interval    time.Duration
 	numSlots    int
-	slots       []list.List
+	slots       []slotList[T]
 	currentSlot int
 	ticker      *time.Ticker
 	mu          sync.Mutex
@@ -40,7 +78,7 @@ type TimingWheel[T any] struct {
 
 // NewTimingWheel creates a new TimingWheel with the given interval and number of slots.
 func NewTimingWheel[T any](interval time.Duration, numSlots int) *TimingWheel[T] {
-	slots := make([]list.List, numSlots)
+	slots := make([]slotList[T], numSlots)
 	return &TimingWheel[T]{
 		interval:    interval,
 		numSlots:    numSlots,
@@ -62,43 +100,32 @@ func (tw *TimingWheel[T]) add(id TimerID, value T, timeout time.Duration) (*Time
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	// remove if there is any existing timer with the same ID.
 	if old, ok := tw.timerMap[id]; ok {
-		if old.element != nil {
-			tw.slots[old.slot].Remove(old.element)
-		}
+		tw.slots[old.slot].remove(old)
 		delete(tw.timerMap, id)
 	}
-
 	if timeout <= 0 {
 		return nil, errors.New("timing wheel timeout must be greater than zero")
 	}
-
 	maxTimeout := time.Duration(tw.numSlots) * tw.interval
 	if timeout > maxTimeout {
 		return nil, fmt.Errorf("timeout %v exceeds wheel max %v", timeout, maxTimeout)
 	}
-
 	now := time.Now()
-	// rounding up to ensure timer never fires early.
 	delayInTicks := int((timeout + tw.interval - 1) / tw.interval)
-
-	if delayInTicks < 0 {
+	if delayInTicks < 1 {
 		delayInTicks = 1
 	}
-
 	slot := (tw.currentSlot + delayInTicks) % tw.numSlots
 
 	timer := &Timer[T]{
+		ID:      id,
 		Value:   value,
 		NextDue: now.Add(timeout),
 		slot:    slot,
-		ID:      id,
 	}
-
-	timer.element = tw.slots[slot].PushBack(timer)
+	tw.slots[slot].push(timer)
 	tw.timerMap[id] = timer
-
 	return timer, nil
 }
 
@@ -112,9 +139,7 @@ func (tw *TimingWheel[T]) Remove(id TimerID) bool {
 	if !ok {
 		return false
 	}
-	if timer.element != nil {
-		tw.slots[timer.slot].Remove(timer.element)
-	}
+	tw.slots[timer.slot].remove(timer)
 	delete(tw.timerMap, id)
 	return true
 }
@@ -139,22 +164,17 @@ func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	// advance the slot by one
 	tw.currentSlot = (tw.currentSlot + 1) % tw.numSlots
-
 	slotList := &tw.slots[tw.currentSlot]
 	var dueTimers []*Timer[T]
 
-	for e := slotList.Front(); e != nil; {
-		next := e.Next()
-		timer := e.Value.(*Timer[T])
-		dueTimers = append(dueTimers, timer)
-		slotList.Remove(e)
-		timer.element = nil
-		delete(tw.timerMap, timer.ID)
-		e = next
+	for t := slotList.front(); t != nil; {
+		next := t.next
+		dueTimers = append(dueTimers, t)
+		slotList.remove(t)
+		delete(tw.timerMap, t.ID)
+		t = next
 	}
-
 	return dueTimers
 }
 
@@ -162,13 +182,11 @@ func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 func (tw *TimingWheel[T]) Reset() {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-
 	for slot := range tw.slots {
-		slotList := &tw.slots[slot]
-		for e := slotList.Front(); e != nil; {
-			next := e.Next()
-			slotList.Remove(e)
-			e = next
+		for t := tw.slots[slot].front(); t != nil; {
+			next := t.next
+			tw.slots[slot].remove(t)
+			t = next
 		}
 	}
 	tw.timerMap = make(map[TimerID]*Timer[T])

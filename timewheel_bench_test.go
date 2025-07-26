@@ -16,7 +16,7 @@ func BenchmarkTimingWheel_AddRemove(b *testing.B) {
 	ids := make([]taskwheel.TimerID, b.N)
 	for i := 0; i < b.N; i++ {
 		ids[i] = taskwheel.TimerID(rune(i))
-		tw.AfterTimeout(ids[i], nil, 500*time.Millisecond)
+		_, _ = tw.AfterTimeout(ids[i], nil, 500*time.Millisecond)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -39,7 +39,7 @@ func BenchmarkTimingWheel_FireBatch(b *testing.B) {
 	tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096)
 	const batch = 100000
 	for i := 0; i < batch; i++ {
-		tw.AfterTimeout(taskwheel.TimerID(rune(i)), nil, 10*time.Millisecond)
+		_, _ = tw.AfterTimeout(taskwheel.TimerID(rune(i)), nil, 10*time.Millisecond)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -54,7 +54,7 @@ func BenchmarkTimingWheel_Memory(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096)
 				for j := 0; j < n; j++ {
-					tw.AfterTimeout(taskwheel.TimerID(rune(j)), nil, time.Hour)
+					_, _ = tw.AfterTimeout(taskwheel.TimerID(rune(j)), nil, time.Hour)
 				}
 			}
 		})
@@ -86,7 +86,6 @@ func BenchmarkTimingWheelPeriodic(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), benchmarkDuration)
-		defer cancel()
 
 		tw := taskwheel.NewTimingWheel[string](interval, 200)
 
@@ -115,6 +114,7 @@ func BenchmarkTimingWheelPeriodic(b *testing.B) {
 			}
 		}()
 		wg.Wait()
+		cancel()
 	}
 }
 
@@ -122,7 +122,6 @@ func BenchmarkGoroutinePerTimer(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), benchmarkDuration)
-		defer cancel()
 
 		var wg sync.WaitGroup
 		wg.Add(numTimers)
@@ -142,5 +141,6 @@ func BenchmarkGoroutinePerTimer(b *testing.B) {
 			}()
 		}
 		wg.Wait()
+		cancel()
 	}
 }
