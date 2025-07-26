@@ -12,7 +12,7 @@ import (
 )
 
 func BenchmarkTimingWheel_AddRemove(b *testing.B) {
-	tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096)
+	tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096, 0)
 	ids := make([]taskwheel.TimerID, b.N)
 	for i := 0; i < b.N; i++ {
 		ids[i] = taskwheel.TimerID(rune(i))
@@ -36,7 +36,7 @@ func BenchmarkNativeTimer_AddRemove(b *testing.B) {
 }
 
 func BenchmarkTimingWheel_FireBatch(b *testing.B) {
-	tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096)
+	tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096, 0)
 	const batch = 100000
 	for i := 0; i < batch; i++ {
 		_, _ = tw.AfterTimeout(taskwheel.TimerID(rune(i)), nil, 10*time.Millisecond)
@@ -52,7 +52,7 @@ func BenchmarkTimingWheel_Memory(b *testing.B) {
 	for _, n := range scales {
 		b.Run(fmt.Sprintf("Timers_%d", n), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096)
+				tw := taskwheel.NewTimingWheel[any](10*time.Millisecond, 4096, 0)
 				for j := 0; j < n; j++ {
 					_, _ = tw.AfterTimeout(taskwheel.TimerID(rune(j)), nil, time.Hour)
 				}
@@ -87,7 +87,7 @@ func BenchmarkTimingWheelPeriodic(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), benchmarkDuration)
 
-		tw := taskwheel.NewTimingWheel[string](interval, 200)
+		tw := taskwheel.NewTimingWheel[string](interval, 200, 0)
 
 		for j := 0; j < numTimers; j++ {
 			id := taskwheel.TimerID(strconv.Itoa(j))

@@ -12,7 +12,7 @@ func TestTimingWheel_AfterTimeout_And_Tick(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
 
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 	var mu sync.Mutex
 	var fired []string
 
@@ -50,7 +50,7 @@ func TestTimingWheel_AfterTimeout_And_Tick(t *testing.T) {
 func TestTimingWheel_AfterTimeout_Errors(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 
 	id := taskwheel.TimerID("error")
 
@@ -75,7 +75,7 @@ func TestTimingWheel_AfterTimeout_Errors(t *testing.T) {
 func TestTimingWheel_DuplicateID_ReplacesOldTimer(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 
 	id := taskwheel.TimerID("dup")
 
@@ -111,7 +111,7 @@ func TestTimingWheel_DuplicateID_ReplacesOldTimer(t *testing.T) {
 func TestTimingWheel_Remove_RemovesTimer(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 	id := taskwheel.TimerID("remove-me")
 
 	_, err := tw.AfterTimeout(id, "bye", 50*time.Millisecond)
@@ -139,7 +139,7 @@ func TestTimingWheel_Remove_RemovesTimer(t *testing.T) {
 func TestTimingWheel_Len(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 
 	if got := tw.Len(); got != 0 {
 		t.Fatalf("expected Len() == 0, got %d", got)
@@ -167,7 +167,7 @@ func TestTimingWheel_Len(t *testing.T) {
 func TestTimingWheel_Get(t *testing.T) {
 	interval := 10 * time.Millisecond
 	numSlots := 100
-	tw := taskwheel.NewTimingWheel[string](interval, numSlots)
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
 
 	id := taskwheel.TimerID("unique-id")
 	val := "payload"
@@ -196,9 +196,9 @@ func TestTimingWheel_Get(t *testing.T) {
 }
 
 func TestTimingWheel_Reset(t *testing.T) {
-	tw := taskwheel.NewTimingWheel[string](10*time.Millisecond, 10)
-	tw.AfterTimeout("a", "A", 10*time.Millisecond)
-	tw.AfterTimeout("b", "B", 20*time.Millisecond)
+	tw := taskwheel.NewTimingWheel[string](10*time.Millisecond, 10, 0)
+	_, _ = tw.AfterTimeout("a", "A", 10*time.Millisecond)
+	_, _ = tw.AfterTimeout("b", "B", 20*time.Millisecond)
 
 	tw.Reset()
 	if tw.Len() != 0 {

@@ -3,7 +3,6 @@ package taskwheel
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -20,7 +19,8 @@ type Timer[T any] struct {
 
 	prev, next *Timer[T]
 	// Index of the slot ()
-	slot int
+	slot  int
+	level int
 }
 
 type slotList[T any] struct {
@@ -62,29 +62,27 @@ func (sl *slotList[T]) front() *Timer[T] {
 	return sl.head
 }
 
-// TimingWheel is a thread safe timing wheel data structure, that manages a large number of timers
-// efficiently.
+// TimingWheel manages a large number of timers efficiently. It's not thread safe.
 type TimingWheel[T any] struct {
 	interval    time.Duration
 	numSlots    int
 	slots       []slotList[T]
 	currentSlot int
 	ticker      *time.Ticker
-	mu          sync.Mutex
-	stopCh      chan struct{}
 
 	timerMap map[TimerID]*Timer[T]
+	level    int
 }
 
 // NewTimingWheel creates a new TimingWheel with the given interval and number of slots.
-func NewTimingWheel[T any](interval time.Duration, numSlots int) *TimingWheel[T] {
+func NewTimingWheel[T any](interval time.Duration, numSlots, level int) *TimingWheel[T] {
 	slots := make([]slotList[T], numSlots)
 	return &TimingWheel[T]{
 		interval:    interval,
 		numSlots:    numSlots,
 		slots:       slots,
 		currentSlot: 0,
-		stopCh:      make(chan struct{}),
+		level:       0,
 		timerMap:    make(map[TimerID]*Timer[T]),
 	}
 }
@@ -97,9 +95,6 @@ func (tw *TimingWheel[T]) AfterTimeout(
 }
 
 func (tw *TimingWheel[T]) add(id TimerID, value T, timeout time.Duration) (*Timer[T], error) {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-
 	if old, ok := tw.timerMap[id]; ok {
 		tw.slots[old.slot].remove(old)
 		delete(tw.timerMap, id)
@@ -132,9 +127,6 @@ func (tw *TimingWheel[T]) add(id TimerID, value T, timeout time.Duration) (*Time
 // Remove deletes a timer by its ID.
 // Returns true if the timer was found and removed, false if not present.
 func (tw *TimingWheel[T]) Remove(id TimerID) bool {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-
 	timer, ok := tw.timerMap[id]
 	if !ok {
 		return false
@@ -146,24 +138,17 @@ func (tw *TimingWheel[T]) Remove(id TimerID) bool {
 
 // Len returns the number of currently scheduled timers.
 func (tw *TimingWheel[T]) Len() int {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
 	return len(tw.timerMap)
 }
 
 // Get returns the timer for the given ID if present.
 func (tw *TimingWheel[T]) Get(id TimerID) (*Timer[T], bool) {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
 	timer, ok := tw.timerMap[id]
 	return timer, ok
 }
 
 // Tick advances the wheel by one slot and returns all timers due at this tick.
 func (tw *TimingWheel[T]) Tick() []*Timer[T] {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-
 	tw.currentSlot = (tw.currentSlot + 1) % tw.numSlots
 	slotList := &tw.slots[tw.currentSlot]
 	var dueTimers []*Timer[T]
@@ -180,8 +165,6 @@ func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 
 // Reset removes all timers and reset the timing wheel state.
 func (tw *TimingWheel[T]) Reset() {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
 	for slot := range tw.slots {
 		for t := tw.slots[slot].front(); t != nil; {
 			next := t.next
