@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+type WheelState int
+
+const (
+	WheelActive WheelState = iota
+	WheelPaused
+)
+
 // TimerID is a uniqueID associated with each Timer Instance.
 type TimerID string
 
@@ -72,6 +79,7 @@ type TimingWheel[T any] struct {
 
 	timerMap map[TimerID]*Timer[T]
 	level    int
+	state    WheelState
 }
 
 // NewTimingWheel creates a new TimingWheel with the given interval and number of slots.
@@ -83,6 +91,7 @@ func NewTimingWheel[T any](interval time.Duration, numSlots, level int) *TimingW
 		slots:       slots,
 		currentSlot: 0,
 		level:       0,
+		state:       WheelActive,
 		timerMap:    make(map[TimerID]*Timer[T]),
 	}
 }
@@ -148,7 +157,12 @@ func (tw *TimingWheel[T]) Get(id TimerID) (*Timer[T], bool) {
 }
 
 // Tick advances the wheel by one slot and returns all timers due at this tick.
+// If the wheel is paused, no timers will fire and nil is returned.
 func (tw *TimingWheel[T]) Tick() []*Timer[T] {
+	if tw.state != WheelActive {
+		return nil
+	}
+
 	tw.currentSlot = (tw.currentSlot + 1) % tw.numSlots
 	slotList := &tw.slots[tw.currentSlot]
 	var dueTimers []*Timer[T]
@@ -174,4 +188,19 @@ func (tw *TimingWheel[T]) Reset() {
 	}
 	tw.timerMap = make(map[TimerID]*Timer[T])
 	tw.currentSlot = 0
+}
+
+// Pause sets the timer wheel into a paused state.
+func (tw *TimingWheel[T]) Pause() {
+	tw.state = WheelPaused
+}
+
+// Resume sets the timer wheel back to active state.
+func (tw *TimingWheel[T]) Resume() {
+	tw.state = WheelActive
+}
+
+// IsPaused returns true if the timer wheel is currently paused.
+func (tw *TimingWheel[T]) IsPaused() bool {
+	return tw.state == WheelPaused
 }

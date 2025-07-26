@@ -205,3 +205,89 @@ func TestTimingWheel_Reset(t *testing.T) {
 		t.Fatalf("expected Len()==0 after Reset, got %d", tw.Len())
 	}
 }
+
+func TestTimingWheel_Tick_PausedState(t *testing.T) {
+	interval := 10 * time.Millisecond
+	numSlots := 10
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
+
+	tw.Pause()
+
+	id := taskwheel.TimerID("paused-id")
+	val := "do-not-fire"
+
+	_, err := tw.AfterTimeout(id, val, interval)
+	if err != nil {
+		t.Fatalf("AfterTimeout error: %v", err)
+	}
+
+	for i := 0; i < numSlots*2; i++ {
+		fired := tw.Tick()
+		if len(fired) > 0 {
+			t.Fatalf("expected no timers to fire while paused, got: %+v", fired)
+		}
+	}
+
+	tw.Resume()
+	fired := tw.Tick()
+	found := false
+	for _, timer := range fired {
+		if timer.ID == id && timer.Value == val {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected timer to fire after resume, but did not")
+	}
+}
+
+func TestTimingWheel_Tick_ActiveState(t *testing.T) {
+	interval := 10 * time.Millisecond
+	numSlots := 10
+	tw := taskwheel.NewTimingWheel[string](interval, numSlots, 0)
+
+	id := taskwheel.TimerID("active-id")
+	val := "should-fire"
+
+	_, err := tw.AfterTimeout(id, val, interval)
+	if err != nil {
+		t.Fatalf("AfterTimeout error: %v", err)
+	}
+
+	tw.Resume()
+
+	found := false
+	for i := 0; i < numSlots*2; i++ {
+		fired := tw.Tick()
+		for _, timer := range fired {
+			if timer.ID == id && timer.Value == val {
+				found = true
+			}
+		}
+		if found {
+			break
+		}
+		time.Sleep(interval)
+	}
+	if !found {
+		t.Fatalf("expected timer to fire in active state, but did not")
+	}
+}
+
+func TestTimingWheel_IsPaused(t *testing.T) {
+	tw := taskwheel.NewTimingWheel[string](10*time.Millisecond, 10, 0)
+
+	if tw.IsPaused() {
+		t.Fatal("expected IsPaused() to be false by default")
+	}
+
+	tw.Pause()
+	if !tw.IsPaused() {
+		t.Fatal("expected IsPaused() to be true after Pause()")
+	}
+
+	tw.Resume()
+	if tw.IsPaused() {
+		t.Fatal("expected IsPaused() to be false after Resume()")
+	}
+}
