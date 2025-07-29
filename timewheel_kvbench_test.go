@@ -129,6 +129,8 @@ func BenchmarkExpirationOverhead_N(b *testing.B) {
 				b.StartTimer()
 				start := time.Now()
 
+				time.Sleep(50 * time.Millisecond)
+
 				totalExpired := 0
 				tickCount := 0
 				for totalExpired < n {
@@ -161,6 +163,7 @@ func BenchmarkExpirationOverhead_N(b *testing.B) {
 
 				start := time.Now()
 
+				// this is very similar we are not making any map here as of now.
 				for j := 0; j < n; j++ {
 					time.AfterFunc(50*time.Millisecond, func() {
 						atomic.AddInt64(&expiredCount, 1)
