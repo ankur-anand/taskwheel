@@ -145,7 +145,7 @@ func BenchmarkMemoryComparison(b *testing.B) {
 			}
 		})
 		defer stop()
-		
+
 		ids := make([]TimerID, 10000)
 		for j := 0; j < 10000; j++ {
 			ids[j] = TimerID(fmt.Sprintf("timer-%d", j))
