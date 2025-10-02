@@ -2,6 +2,7 @@ package taskwheel
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +25,35 @@ func ExampleHierarchicalTimingWheel() {
 	// Output:
 	// Timer short fired
 	// Timer long fired
+}
+
+func ExampleHierarchicalTimingWheel_StartBatch() {
+	intervals := []time.Duration{10 * time.Millisecond, 1 * time.Second}
+	slots := []int{100, 60}
+	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+
+	stop := wheel.StartBatch(10*time.Millisecond, func(timers []*Timer[string]) {
+		fmt.Printf("Batch of %d timers fired\n", len(timers))
+
+		for _, timer := range timers {
+			fmt.Printf("- Timer %s fired\n", timer.Value)
+		}
+
+		// or use can use pool or any other pattern
+		//for _, timer := range timers {
+		//	workerpool <- timer
+		//}
+	})
+
+	defer stop()
+
+	_, _ = wheel.AfterTimeout("a", "short", 45*time.Millisecond)
+	_, _ = wheel.AfterTimeout("b", "long", 50*time.Millisecond)
+	time.Sleep(3 * time.Second)
+	// Output:
+	// Batch of 2 timers fired
+	// - Timer short fired
+	// - Timer long fired
 }
 
 func TestHierarchicalTimingWheel_FiresTimersCorrectly(t *testing.T) {
@@ -314,5 +344,46 @@ func TestHierarchicalTimingWheel_Len(t *testing.T) {
 	wheel.Reset()
 	if wheel.Len() != 0 {
 		t.Fatalf("Expected 0 timers after reset")
+	}
+}
+
+func TestHierarchicalTimingWheel_StartBatch(t *testing.T) {
+	intervals := []time.Duration{10 * time.Millisecond, 1 * time.Second}
+	slots := []int{100, 60}
+	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+
+	var mu sync.Mutex
+	var batches []int
+	var allFired []string
+
+	stop := wheel.StartBatch(10*time.Millisecond, func(timers []*Timer[string]) {
+		mu.Lock()
+		batches = append(batches, len(timers))
+		for _, t := range timers {
+			allFired = append(allFired, t.Value)
+		}
+		mu.Unlock()
+	})
+
+	defer stop()
+	_, _ = wheel.AfterTimeout("a", "A", 48*time.Millisecond)
+	_, _ = wheel.AfterTimeout("b", "B", 45*time.Millisecond)
+	_, _ = wheel.AfterTimeout("c", "C", 100*time.Millisecond)
+
+	time.Sleep(300 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(batches) != 2 {
+		t.Fatalf("Expected 2 timer batchess, got %d", len(batches))
+	}
+
+	if len(allFired) != 3 {
+		t.Fatalf("Expected 3 timer, got %d", len(allFired))
+	}
+
+	if !reflect.DeepEqual(allFired, []string{"A", "B", "C"}) {
+		t.Fatalf("Expected all fired timer, got %v", allFired)
 	}
 }
