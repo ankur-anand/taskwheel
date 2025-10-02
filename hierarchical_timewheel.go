@@ -174,6 +174,7 @@ func (htw *HierarchicalTimingWheel[T]) calcPlacement(timeout time.Duration, now 
 
 // Start begins ticking the hierarchical timing wheel at the specified interval in a new goroutine.
 // If wheel is paused Tick() is a no-op and no timers will be fired until resumed.
+// The callback is executed synchronously, care should be taken to not block the onTimer Callback.
 func (htw *HierarchicalTimingWheel[T]) Start(tickInterval time.Duration, onTimer func(*Timer[T])) (stop func()) {
 	stopCh := make(chan struct{})
 	go func() {
@@ -184,7 +185,31 @@ func (htw *HierarchicalTimingWheel[T]) Start(tickInterval time.Duration, onTimer
 			case <-ticker.C:
 				due := htw.Tick()
 				for _, t := range due {
-					go onTimer(t)
+					onTimer(t)
+				}
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+	return func() { close(stopCh) }
+}
+
+// StartBatch begins ticking the hierarchical timing wheel at the specified interval in a new goroutine.
+// If wheel is paused Tick() is a no-op and no timers will be fired until resumed.
+// All timers that are due are passed as a batch to a onTimerBatch callback.
+// The callback is executed synchronously, care should be taken to not block the onTimerBatch Callback.
+func (htw *HierarchicalTimingWheel[T]) StartBatch(tickInterval time.Duration, onTimerBatch func([]*Timer[T])) (stop func()) {
+	stopCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(tickInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				due := htw.Tick()
+				if len(due) > 0 {
+					onTimerBatch(due)
 				}
 			case <-stopCh:
 				return
