@@ -18,9 +18,18 @@ type HierarchicalTimingWheel[T any] struct {
 }
 
 // NewHierarchicalTimingWheel returns an initialized Active State Wheel.
+// Maximum of 255 levels and 65535 slots per level are supported.
 func NewHierarchicalTimingWheel[T any](intervals []time.Duration, slots []int) *HierarchicalTimingWheel[T] {
 	if len(intervals) != len(slots) {
 		panic("intervals and slots length mismatch")
+	}
+
+	if len(intervals) == 0 {
+		panic("intervals must not be empty")
+	}
+
+	if len(intervals) > 255 {
+		panic("intervals must not be more than 255 elements")
 	}
 
 	var maxSpans []time.Duration
@@ -33,6 +42,9 @@ func NewHierarchicalTimingWheel[T any](intervals []time.Duration, slots []int) *
 		}
 		if slots[i] <= 0 {
 			panic(fmt.Sprintf("slots[%d] must be > 0", i))
+		}
+		if slots[i] > 65535 {
+			panic(fmt.Sprintf("slots[%d] must be <= 65535", i))
 		}
 		levels[i] = NewTimingWheel[T](intervals[i], slots[i], i)
 		span := time.Duration(slots[i]) * intervals[i]
@@ -65,8 +77,8 @@ func (htw *HierarchicalTimingWheel[T]) AfterTimeout(id TimerID, value T, timeout
 		ID:      id,
 		Value:   value,
 		NextDue: due,
-		slot:    slot,
-		level:   level,
+		slot:    uint16(slot),
+		level:   uint8(level),
 	}
 
 	tw := htw.levels[level]
@@ -142,9 +154,10 @@ func (htw *HierarchicalTimingWheel[T]) Tick() []*Timer[T] {
 				due = append(due, t)
 			} else {
 				// down to the right slot of the next lower level.
-				remaining := time.Until(t.NextDue)
+				nextDue := time.Unix(0, t.NextDue)
+				remaining := time.Until(nextDue)
 				level, slot, _ := htw.calcPlacement(remaining, time.Now())
-				t.level, t.slot = level, slot
+				t.level, t.slot = uint8(level), uint16(slot)
 				htw.levels[level].slots[slot].push(t)
 				htw.levels[level].timerMap[t.ID] = t
 			}
@@ -155,7 +168,7 @@ func (htw *HierarchicalTimingWheel[T]) Tick() []*Timer[T] {
 	return due
 }
 
-func (htw *HierarchicalTimingWheel[T]) calcPlacement(timeout time.Duration, now time.Time) (level, slot int, due time.Time) {
+func (htw *HierarchicalTimingWheel[T]) calcPlacement(timeout time.Duration, now time.Time) (level, slot int, due int64) {
 	for lvl, tw := range htw.levels {
 		levelSpan := time.Duration(tw.numSlots) * tw.interval
 		if timeout < levelSpan || lvl == htw.numLevels-1 {
@@ -164,7 +177,7 @@ func (htw *HierarchicalTimingWheel[T]) calcPlacement(timeout time.Duration, now 
 				delayInTicks = 1
 			}
 			slot = (tw.currentSlot + delayInTicks) % tw.numSlots
-			due = now.Add(timeout)
+			due = now.Add(timeout).UnixNano()
 			return lvl, slot, due
 		}
 		timeout -= levelSpan

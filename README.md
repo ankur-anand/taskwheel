@@ -5,6 +5,10 @@
 
 A high-performance, generic **Hierarchical Timing Wheel** implementation in Go for efficient timer management at scale.
 
+## Why TaskWheel?
+
+When you need to manage thousands or millions or timers (timeouts, TTLs, scheduled tasks) etc. While Go's standard `time.Timer` is excellent, it faces some challenges at high volumes.
+
 ### Installation
 
 ```bash
@@ -114,27 +118,38 @@ goos: darwin
 goarch: arm64
 pkg: github.com/ankur-anand/taskwheel
 cpu: Apple M2 Pro
-BenchmarkNativeTimers/1K_timers_100ms-10         	      10	 102039642 ns/op	  191393 B/op	    2091 allocs/op
-BenchmarkNativeTimers/10K_timers_100ms-10        	       9	 114114778 ns/op	 1820984 B/op	   20260 allocs/op
-BenchmarkNativeTimers/100K_timers_1s-10          	       1	1090769709 ns/op	39694704 B/op	  240698 allocs/op
-BenchmarkTimingWheelAfterTimeout/1K_timers_100ms-10         	      10	 110101579 ns/op	  315608 B/op	    1056 allocs/op
-BenchmarkTimingWheelAfterTimeout/10K_timers_100ms-10        	       9	 111119176 ns/op	 2857496 B/op	   10181 allocs/op
-BenchmarkTimingWheelAfterTimeout/100K_timers_100ms-10       	       9	 122693727 ns/op	26476164 B/op	  101094 allocs/op
-BenchmarkMemoryComparison/Native_10K_timers-10              	      10	 111232592 ns/op	 1429328 B/op	   20003 allocs/op
-BenchmarkMemoryComparison/TimingWheel_10K_timers-10         	      10	 110203346 ns/op	 2857505 B/op	   10181 allocs/op
+BenchmarkNativeTimers/1K_timers_100ms-10                             	      10	 102317362 ns/op	  136000 B/op	    2000 allocs/op
+BenchmarkNativeTimers/10K_timers_100ms-10                            	      10	 113182400 ns/op	 1360000 B/op	   20000 allocs/op
+BenchmarkNativeTimers/100K_timers_1s-10                              	       1	1093996708 ns/op	13600000 B/op	  200000 allocs/op
+BenchmarkTimingWheelAfterTimeout/1K_timers_100ms-10                  	      10	 110006242 ns/op	  214488 B/op	    1056 allocs/op
+BenchmarkTimingWheelAfterTimeout/10K_timers_100ms-10                 	      10	 110001250 ns/op	 1973784 B/op	   10181 allocs/op
+BenchmarkTimingWheelAfterTimeout/100K_timers_100ms-10                	       9	 121230764 ns/op	18755629 B/op	  101093 allocs/op
+BenchmarkMemoryComparison/Native_10K_timers-10                       	      10	 111245146 ns/op	 1336540 B/op	   20001 allocs/op
+BenchmarkMemoryComparison/TimingWheel_10K_timers-10                  	      10	 109956992 ns/op	 1973784 B/op	   10181 allocs/op
+BenchmarkTimingWheel_Memory/Timers_100000-10                         	      67	  19544636 ns/op	 9665561 B/op	  600001 allocs/op
+BenchmarkTimingWheel_Memory/Timers_1000000-10                        	       6	 199790202 ns/op	96065897 B/op	 6000003 allocs/op
+BenchmarkTimingWheel_Memory/Timers_10000000-10                       	       1	1807187459 ns/op	960067416 B/op	60000009 allocs/op
+BenchmarkNativeTimer_Memory/Timers_100000-10                         	     140	  12572099 ns/op	15329470 B/op	  100001 allocs/op
+BenchmarkNativeTimer_Memory/Timers_1000000-10                        	      13	 145825920 ns/op	151103566 B/op	 1000001 allocs/op
+BenchmarkNativeTimer_Memory/Timers_10000000-10                       	       1	1309542667 ns/op	1705383936 B/op	10000002 allocs/op
 ```
+### Performance Comparison
 
 | Workload              | Metric     | NativeTimers | TimingWheel | Difference |
 |-----------------------|------------|--------------|-------------|------------|
 | **1K timers (100ms)** | Time/op    | 102 ms       | 110 ms      | +8% slower |
-|                       | Mem/op     | 191 KB       | 316 KB      | +65% more  |
-|                       | Allocs/op  | 2.1 K        | 1.1 K       | -50% fewer |
-| **10K timers (100ms)**| Time/op    | 114 ms       | 111 ms      | -3% faster |
-|                       | Mem/op     | 1.8 MB       | 2.9 MB      | +57% more  |
-|                       | Allocs/op  | 20.3 K       | 10.2 K      | -50% fewer |
+|                       | Mem/op     | 136 KB       | 214 KB      | +58% more  |
+|                       | Allocs/op  | 2.0 K        | 1.1 K       | -47% fewer |
+| **10K timers (100ms)**| Time/op    | 113 ms       | 110 ms      | -3% faster |
+|                       | Mem/op     | 1.36 MB      | 1.97 MB     | +45% more  |
+|                       | Allocs/op  | 20.0 K       | 10.2 K      | -49% fewer |
 | **100K timers (1s)**  | Time/op    | 1.09 s       | 0.12 s      | -89% faster |
-|                       | Mem/op     | 39.7 MB      | 26.5 MB     | -33% less  |
-|                       | Allocs/op  | 240.7 K      | 101.1 K     | -58% fewer |
+|                       | Mem/op     | 13.6 MB      | 18.8 MB     | +38% more  |
+|                       | Allocs/op  | 200.0 K      | 101.1 K     | -50% fewer |
+
+**At very small scales (≈1K timers)**, TimingWheel shows a slight overhead (+8% slower, more memory).  
+But once you reach **10K+ timers**, it matches or beats native performance, consistently cuts allocations ~50%,
+and at **100K timers** it’s ~9× faster with half the allocations.
 
 ## Advanced Usage
 
