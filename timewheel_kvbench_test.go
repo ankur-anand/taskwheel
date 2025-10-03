@@ -25,7 +25,7 @@ func (c *SimpleTimingWheelCache) Set(key, value string, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.data[key] = value
-	_, _ = c.wheel.AfterTimeout(TimerID(key), value, ttl)
+	_, _ = c.wheel.AfterTimeout(HashID(key), key, ttl)
 }
 
 func (c *SimpleTimingWheelCache) Get(key string) (string, bool) {
@@ -40,7 +40,7 @@ func (c *SimpleTimingWheelCache) ManualTick() int {
 	defer c.mu.Unlock()
 	expired := c.wheel.Tick()
 	for _, timer := range expired {
-		delete(c.data, string(timer.ID))
+		delete(c.data, timer.Value)
 	}
 	return len(expired)
 }

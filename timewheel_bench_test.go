@@ -3,7 +3,6 @@ package taskwheel_test
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -90,7 +89,7 @@ func BenchmarkTimingWheelPeriodic(b *testing.B) {
 		tw := taskwheel.NewTimingWheel[string](interval, 200, 0)
 
 		for j := 0; j < numTimers; j++ {
-			id := taskwheel.TimerID(strconv.Itoa(j))
+			id := taskwheel.TimerID(rune(j))
 			_, _ = tw.AfterTimeout(id, "payload", baseTickerInterval)
 		}
 

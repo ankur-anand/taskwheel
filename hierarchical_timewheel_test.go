@@ -18,8 +18,8 @@ func ExampleHierarchicalTimingWheel() {
 	})
 	defer stop()
 
-	_, _ = wheel.AfterTimeout("a", "short", 45*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "long", 2*time.Second)
+	_, _ = wheel.AfterTimeout(HashID("a"), "short", 45*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "long", 2*time.Second)
 
 	time.Sleep(3 * time.Second)
 	// Output:
@@ -47,8 +47,8 @@ func ExampleHierarchicalTimingWheel_StartBatch() {
 
 	defer stop()
 
-	_, _ = wheel.AfterTimeout("a", "short", 45*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "long", 50*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "short", 45*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "long", 50*time.Millisecond)
 	time.Sleep(3 * time.Second)
 	// Output:
 	// Batch of 2 timers fired
@@ -76,17 +76,17 @@ func TestHierarchicalTimingWheel_FiresTimersCorrectly(t *testing.T) {
 	})
 	defer stop()
 
-	_, err := wheel.AfterTimeout("a", "fire50ms", 50*time.Millisecond)
+	_, err := wheel.AfterTimeout(HashID("a"), "fire50ms", 50*time.Millisecond)
 	if err != nil {
 		t.Fatalf("AfterTimeout failed: %v", err)
 	}
 
-	_, err = wheel.AfterTimeout("b", "fire1.3s", 1300*time.Millisecond)
+	_, err = wheel.AfterTimeout(HashID("b"), "fire1.3s", 1300*time.Millisecond)
 	if err != nil {
 		t.Fatalf("AfterTimeout failed: %v", err)
 	}
 
-	_, err = wheel.AfterTimeout("c", "fire2s", 2*time.Second)
+	_, err = wheel.AfterTimeout(HashID("c"), "fire2s", 2*time.Second)
 	if err != nil {
 		t.Fatalf("AfterTimeout failed: %v", err)
 	}
@@ -135,16 +135,16 @@ func TestHierarchicalTimingWheel_Remove(t *testing.T) {
 	})
 	defer stop()
 
-	_, err := wheel.AfterTimeout("a", "should_fire", 30*time.Millisecond)
+	_, err := wheel.AfterTimeout(HashID("a"), "should_fire", 30*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = wheel.AfterTimeout("b", "should_NOT_fire", 200*time.Millisecond)
+	_, err = wheel.AfterTimeout(HashID("b"), "should_NOT_fire", 200*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ok := wheel.Remove("b")
+	ok := wheel.Remove(HashID("b"))
 	if !ok {
 		t.Fatal("Remove failed for timer b")
 	}
@@ -172,14 +172,14 @@ func TestHierarchicalTimingWheel_OrderAndPrecision(t *testing.T) {
 	start := time.Now()
 	stop := wheel.Start(10*time.Millisecond, func(timer *Timer[string]) {
 		mu.Lock()
-		fireTimes[string(timer.ID)] = time.Now()
+		fireTimes[timer.Value] = time.Now()
 		mu.Unlock()
 		wg.Done()
 	})
 	defer stop()
 
-	_, _ = wheel.AfterTimeout("a", "t1", 80*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "t2", 160*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "a", 80*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "b", 160*time.Millisecond)
 
 	wg.Wait()
 
@@ -210,7 +210,7 @@ func TestHierarchicalTimingWheel_Pause_And_Resume(t *testing.T) {
 	})
 	defer stop()
 
-	_, err := wheel.AfterTimeout("a", "should_fire_after_resume", 100*time.Millisecond)
+	_, err := wheel.AfterTimeout(HashID("a"), "should_fire_after_resume", 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,9 +258,9 @@ func TestHierarchicalTimingWheel_Drain(t *testing.T) {
 	slots := []int{100, 60}
 	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
 
-	_, _ = wheel.AfterTimeout("a", "A", 50*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "B", 1*time.Second)
-	_, _ = wheel.AfterTimeout("c", "C", 1*time.Second+100*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "A", 50*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "B", 1*time.Second)
+	_, _ = wheel.AfterTimeout(HashID("c"), "C", 1*time.Second+100*time.Millisecond)
 
 	drained := wheel.Drain()
 	found := map[string]bool{"A": false, "B": false, "C": false}
@@ -286,9 +286,9 @@ func TestHierarchicalTimingWheel_Reset(t *testing.T) {
 	slots := []int{100, 60}
 	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
 
-	_, _ = wheel.AfterTimeout("a", "A", 50*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "B", 1*time.Second)
-	_, _ = wheel.AfterTimeout("c", "C", 1*time.Second+100*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "A", 50*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "B", 1*time.Second)
+	_, _ = wheel.AfterTimeout(HashID("c"), "C", 1*time.Second+100*time.Millisecond)
 
 	wheel.Reset()
 	if got := wheel.Len(); got != 0 {
@@ -307,14 +307,14 @@ func TestHierarchicalTimingWheel_Get(t *testing.T) {
 	slots := []int{100, 60}
 	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
 
-	_, ok := wheel.Get("nonexistent")
+	_, ok := wheel.Get(HashID("nonexistent"))
 	if ok {
 		t.Fatal("Expected Get to return false for missing timer")
 	}
 
-	_, _ = wheel.AfterTimeout("xid", "payload", 200*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("xid"), "payload", 200*time.Millisecond)
 
-	tmr, ok := wheel.Get("xid")
+	tmr, ok := wheel.Get(HashID("xid"))
 	if !ok || tmr.Value != "payload" {
 		t.Fatal("Get did not find the expected timer")
 	}
@@ -329,14 +329,14 @@ func TestHierarchicalTimingWheel_Len(t *testing.T) {
 		t.Fatalf("Expected 0 timers at start")
 	}
 
-	_, _ = wheel.AfterTimeout("a", "A", 30*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "B", 70*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "A", 30*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "B", 70*time.Millisecond)
 
 	if wheel.Len() != 2 {
 		t.Fatalf("Expected 2 timers after insertions")
 	}
 
-	wheel.Remove("a")
+	wheel.Remove(HashID("a"))
 	if wheel.Len() != 1 {
 		t.Fatalf("Expected 1 timer after remove")
 	}
@@ -366,9 +366,9 @@ func TestHierarchicalTimingWheel_StartBatch(t *testing.T) {
 	})
 
 	defer stop()
-	_, _ = wheel.AfterTimeout("a", "A", 48*time.Millisecond)
-	_, _ = wheel.AfterTimeout("b", "B", 45*time.Millisecond)
-	_, _ = wheel.AfterTimeout("c", "C", 100*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("a"), "A", 48*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("b"), "B", 45*time.Millisecond)
+	_, _ = wheel.AfterTimeout(HashID("c"), "C", 100*time.Millisecond)
 
 	time.Sleep(300 * time.Millisecond)
 

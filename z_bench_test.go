@@ -82,7 +82,7 @@ func BenchmarkTimingWheelAfterTimeout(b *testing.B) {
 
 			ids := make([]TimerID, scenario.numTimers)
 			for j := 0; j < scenario.numTimers; j++ {
-				ids[j] = TimerID(fmt.Sprintf("timer-%d", j))
+				ids[j] = HashID(fmt.Sprintf("timer-%d", j))
 			}
 
 			b.ResetTimer()
@@ -148,7 +148,7 @@ func BenchmarkMemoryComparison(b *testing.B) {
 
 		ids := make([]TimerID, 10000)
 		for j := 0; j < 10000; j++ {
-			ids[j] = TimerID(fmt.Sprintf("timer-%d", j))
+			ids[j] = HashID(fmt.Sprintf("timer-%d", j))
 		}
 
 		b.ResetTimer()

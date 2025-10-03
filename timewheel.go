@@ -3,6 +3,7 @@ package taskwheel
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"time"
 )
 
@@ -14,20 +15,30 @@ const (
 )
 
 // TimerID is a uniqueID associated with each Timer Instance.
-type TimerID string
+type TimerID uint64
+
+// HashID converts a string to a TimerID using FNV-1a hash.
+func HashID(s string) TimerID {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return TimerID(h.Sum64())
+}
 
 // Timer is scheduled event managed by a Timing Wheel.
 // It's support generic payload type [T].
 type Timer[T any] struct {
-	ID    TimerID
-	Value T
+	ID TimerID
 	// NextDue is the wall clock when this timer should be fired.
-	NextDue time.Time
+	NextDue int64
+
+	Value T
 
 	prev, next *Timer[T]
 	// Index of the slot ()
-	slot  int
-	level int
+	slot  uint16
+	level uint8
+	// 1 byte pad
+	_ uint8
 }
 
 type slotList[T any] struct {
@@ -75,7 +86,6 @@ type TimingWheel[T any] struct {
 	numSlots    int
 	slots       []slotList[T]
 	currentSlot int
-	ticker      *time.Ticker
 
 	timerMap map[TimerID]*Timer[T]
 	level    int
@@ -125,8 +135,9 @@ func (tw *TimingWheel[T]) add(id TimerID, value T, timeout time.Duration) (*Time
 	timer := &Timer[T]{
 		ID:      id,
 		Value:   value,
-		NextDue: now.Add(timeout),
-		slot:    slot,
+		NextDue: now.Add(timeout).UnixNano(),
+		slot:    uint16(slot),
+		level:   0,
 	}
 	tw.slots[slot].push(timer)
 	tw.timerMap[id] = timer
