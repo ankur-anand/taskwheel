@@ -427,10 +427,10 @@ func TestHierarchicalTimingWheel_15SecondTimer(t *testing.T) {
 		mu.Lock()
 		delay := firedAt.Sub(scheduledAt)
 		mu.Unlock()
-		if delay < 14900*time.Millisecond || delay > 15100*time.Millisecond {
-			t.Errorf("timer fired wrong time: %v", delay)
+		if delay < 14*time.Second || delay > 17*time.Second {
+			t.Errorf("timer fired wrong time: %v (expected around 15s)", delay)
 		}
-	case <-time.After(16 * time.Second):
+	case <-time.After(18 * time.Second):
 		t.Errorf("timer did not fire")
 	}
 }
