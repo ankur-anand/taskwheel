@@ -387,3 +387,167 @@ func TestHierarchicalTimingWheel_StartBatch(t *testing.T) {
 		t.Fatalf("Expected all fired timer, got %v", allFired)
 	}
 }
+
+func TestHierarchicalTimingWheel_15SecondTimer(t *testing.T) {
+	intervals := []time.Duration{1 * time.Millisecond, 10 * time.Millisecond, 100 * time.Millisecond, time.Second}
+	slots := []int{100, 100, 100, 60}
+	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+	timeout := 15 * time.Second
+	now := time.Now()
+	level, slot, dueNano := wheel.calcPlacement(timeout, now)
+	if level != 2 {
+		t.Errorf("expected level 2, got %d", level)
+	}
+	if slot != 1 {
+		t.Errorf("expected slot 1, got %d", slot)
+	}
+	expectedDue := now.Add(timeout)
+	actualDue := time.Unix(0, dueNano)
+	if diff := actualDue.Sub(expectedDue); diff < -10*time.Millisecond || diff > 10*time.Millisecond {
+		t.Errorf("due mismatch: expected %v, got %v", expectedDue, actualDue)
+	}
+	var firedAt time.Time
+	var mu sync.Mutex
+	done := make(chan struct{})
+	scheduledAt := time.Now()
+	stop := wheel.Start(1*time.Millisecond, func(timer *Timer[string]) {
+		mu.Lock()
+		firedAt = time.Now()
+		mu.Unlock()
+		close(done)
+	})
+	defer stop()
+	id := HashID("15s-test")
+	_, err := wheel.AfterTimeout(id, "15s-timer", timeout)
+	if err != nil {
+		t.Fatalf("AfterTimeout failed: %v", err)
+	}
+	select {
+	case <-done:
+		mu.Lock()
+		delay := firedAt.Sub(scheduledAt)
+		mu.Unlock()
+		if delay < 14900*time.Millisecond || delay > 15100*time.Millisecond {
+			t.Errorf("timer fired wrong time: %v", delay)
+		}
+	case <-time.After(16 * time.Second):
+		t.Errorf("timer did not fire")
+	}
+}
+
+func TestHierarchicalTimingWheel_PlacementEdgeCases(t *testing.T) {
+	intervals := []time.Duration{1 * time.Millisecond, 10 * time.Millisecond, 100 * time.Millisecond, time.Second}
+	slots := []int{100, 100, 100, 60}
+	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+	tests := []struct {
+		name          string
+		timeout       time.Duration
+		expectedLevel int
+		expectedSlot  int
+	}{
+		{"1ms", 1 * time.Millisecond, 0, 1},
+		{"99ms", 99 * time.Millisecond, 0, 99},
+		{"100ms", 100 * time.Millisecond, 1, 1},
+		{"500ms", 500 * time.Millisecond, 1, 5},
+		{"9999ms", 9999 * time.Millisecond, 1, 99},
+		{"10s", 10 * time.Second, 2, 1},
+		{"25s", 25 * time.Second, 2, 2},
+		{"95s", 95 * time.Second, 2, 9},
+		{"1000s", 1000 * time.Second, 3, 1},
+		{"30000s", 30000 * time.Second, 3, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now()
+			level, slot, dueNano := wheel.calcPlacement(tt.timeout, now)
+			if level != tt.expectedLevel {
+				t.Errorf("level got %d, want %d", level, tt.expectedLevel)
+			}
+			if slot != tt.expectedSlot {
+				t.Errorf("slot got %d, want %d", slot, tt.expectedSlot)
+			}
+			expectedDue := now.Add(tt.timeout)
+			actualDue := time.Unix(0, dueNano)
+			if diff := actualDue.Sub(expectedDue); diff < -10*time.Millisecond || diff > 10*time.Millisecond {
+				t.Errorf("due mismatch: expected %v, got %v", expectedDue, actualDue)
+			}
+		})
+	}
+}
+
+func TestHierarchicalTimingWheel_CascadingAccuracy(t *testing.T) {
+	intervals := []time.Duration{10 * time.Millisecond, 100 * time.Millisecond, time.Second}
+	slots := []int{10, 10, 10}
+	tests := []struct {
+		name     string
+		timeout  time.Duration
+		minDelay time.Duration
+		maxDelay time.Duration
+	}{
+		{"250ms", 250 * time.Millisecond, 240 * time.Millisecond, 260 * time.Millisecond},
+		{"1.5s", 1500 * time.Millisecond, 1480 * time.Millisecond, 1520 * time.Millisecond},
+		{"3.7s", 3700 * time.Millisecond, 3680 * time.Millisecond, 3720 * time.Millisecond},
+		{"5.25s", 5250 * time.Millisecond, 5230 * time.Millisecond, 5270 * time.Millisecond},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+			var firedAt time.Time
+			var mu sync.Mutex
+			done := make(chan struct{})
+			scheduledAt := time.Now()
+			stop := wheel.Start(10*time.Millisecond, func(timer *Timer[string]) {
+				mu.Lock()
+				firedAt = time.Now()
+				mu.Unlock()
+				close(done)
+			})
+			defer stop()
+			id := HashID(tt.name)
+			_, err := wheel.AfterTimeout(id, tt.name, tt.timeout)
+			if err != nil {
+				t.Fatalf("AfterTimeout failed: %v", err)
+			}
+			select {
+			case <-done:
+				mu.Lock()
+				delay := firedAt.Sub(scheduledAt)
+				mu.Unlock()
+				if delay < tt.minDelay || delay > tt.maxDelay {
+					t.Errorf("delay out of range: %v", delay)
+				}
+			case <-time.After(tt.timeout + 500*time.Millisecond):
+				t.Errorf("timer did not fire")
+			}
+		})
+	}
+}
+
+func TestHierarchicalTimingWheel_RoundingBehavior(t *testing.T) {
+	intervals := []time.Duration{10 * time.Millisecond, 100 * time.Millisecond}
+	slots := []int{10, 10}
+	wheel := NewHierarchicalTimingWheel[string](intervals, slots)
+	tests := []struct {
+		name          string
+		timeout       time.Duration
+		expectedLevel int
+		expectedSlot  int
+	}{
+		{"55ms", 55 * time.Millisecond, 0, 6},
+		{"550ms", 550 * time.Millisecond, 1, 5},
+		{"51ms", 51 * time.Millisecond, 0, 6},
+		{"510ms", 510 * time.Millisecond, 1, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now()
+			level, slot, _ := wheel.calcPlacement(tt.timeout, now)
+			if level != tt.expectedLevel {
+				t.Errorf("level got %d, want %d", level, tt.expectedLevel)
+			}
+			if slot != tt.expectedSlot {
+				t.Errorf("slot got %d, want %d", slot, tt.expectedSlot)
+			}
+		})
+	}
+}
