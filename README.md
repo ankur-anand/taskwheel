@@ -11,19 +11,19 @@ A high-performance, generic **Hierarchical Timing Wheel** implementation in Go f
 
 When you need to manage thousands or millions or timers (timeouts, TTLs, scheduled tasks) etc. While Go's standard `time.Timer` is excellent, it faces some challenges at high volumes.
 
-## 🧩 Use Case: Expiring 10 Million Cache Keys Efficiently
+## Use Case: Expiring 10 Million Cache Keys Efficiently
 
 Traditional cache cleanup scans every key (`O(n)`), which works fine at small scale —  
 but completely breaks down once you hit **millions** of entries.
 
 Using a **Timing Wheel**, expiration becomes `O(1)` per tick —  
 processing *only* the keys that are actually due right now.
+# Read Stall Comparison (10 Million Keys)
 
-| **Entries** | **Naive Scan Time** | **Timing Wheel Expiration** |
-|--------------|--------------------|------------------------------|
-| `100 K`      | `≈ 49 ms`          | `≈ 2.3 µs`                   |
-| `1 M`        | `≈ 275 ms`         | `≈ 1.7 µs`                   |
-| `10 M`       | `≈ 2.29 s`         | `≈ O(1)` per tick            |
+|**Metric**|**Naive Scan**|**Timing Wheel**|
+|:-|:-|:-|
+|**Avg Read Latency**|4.68 ms|**3.15 µs**|
+|**Max Read Stall**|500 ms|**≈ 2 ms**|
 
 At **10 million keys**, a naive cleanup can stall reads for seconds —  
 while the **Timing Wheel** glides through them *in microseconds*.
