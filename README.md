@@ -5,35 +5,7 @@
 
 A high-performance, generic **Hierarchical Timing Wheel** implementation in Go for efficient timer management at scale.
 
-<pre>
-```mermaid
-flowchart LR
-  subgraph L1["Level 1"]
-    L1b(("Buckets"))
-  end
-
-  subgraph L2["Level 2"]
-    L2b(("Buckets"))
-  end
-
-  subgraph LN["Level N"]
-    LNb(("Buckets"))
-  end
-
-  subgraph L256["Level 256"]
-    L256b(("Buckets"))
-  end
-
-  %% Expiration
-  L1b -- "tick" --> Expire["Expire due items"]
-
-  %% Cascades
-  L1b -. "wrap → cascade" .-> L2b
-  L2b -. "wrap → cascade" .-> LNb
-  LNb -. "wrap → cascade" .-> L256b
-```
-</pre>
-
+![Timing wheel levels](./docs/images/hwwheel.png)
 
 ## Why TaskWheel?
 
