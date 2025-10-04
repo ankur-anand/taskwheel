@@ -5,9 +5,59 @@
 
 A high-performance, generic **Hierarchical Timing Wheel** implementation in Go for efficient timer management at scale.
 
+<pre>
+```mermaid
+flowchart LR
+  subgraph L1["Level 1"]
+    L1b(("Buckets"))
+  end
+
+  subgraph L2["Level 2"]
+    L2b(("Buckets"))
+  end
+
+  subgraph LN["Level N"]
+    LNb(("Buckets"))
+  end
+
+  subgraph L256["Level 256"]
+    L256b(("Buckets"))
+  end
+
+  %% Expiration
+  L1b -- "tick" --> Expire["Expire due items"]
+
+  %% Cascades
+  L1b -. "wrap → cascade" .-> L2b
+  L2b -. "wrap → cascade" .-> LNb
+  LNb -. "wrap → cascade" .-> L256b
+```
+</pre>
+
+
 ## Why TaskWheel?
 
 When you need to manage thousands or millions or timers (timeouts, TTLs, scheduled tasks) etc. While Go's standard `time.Timer` is excellent, it faces some challenges at high volumes.
+
+## 🧩 Use Case: Expiring 10 Million Cache Keys Efficiently
+
+Traditional cache cleanup scans every key (`O(n)`), which works fine at small scale —  
+but completely breaks down once you hit **millions** of entries.
+
+Using a **Timing Wheel**, expiration becomes `O(1)` per tick —  
+processing *only* the keys that are actually due right now.
+
+| **Entries** | **Naive Scan Time** | **Timing Wheel Expiration** |
+|--------------|--------------------|------------------------------|
+| `100 K`      | `≈ 49 ms`          | `≈ 2.3 µs`                   |
+| `1 M`        | `≈ 275 ms`         | `≈ 1.7 µs`                   |
+| `10 M`       | `≈ 2.29 s`         | `≈ O(1)` per tick            |
+
+At **10 million keys**, a naive cleanup can stall reads for seconds —  
+while the **Timing Wheel** glides through them *in microseconds*.
+
+**Read the full story on Medium:**  
+[Killing O(n): How Timing Wheels Expire 10 Million Keys Effortlessly in Golang](https://medium.com/@ankur_anand/killing-o-n-how-timing-wheels-expire-10-million-keys-effortlessly-in-golang-9a6b8709fd91)
 
 ### Installation
 
