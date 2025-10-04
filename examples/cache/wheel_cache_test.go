@@ -42,7 +42,7 @@ func TestOptimizedWheelPerformance(t *testing.T) {
 
 func TestOptimizedWheelWithConcurrentReads(t *testing.T) {
 
-	sizes := []int{100000, 1000000}
+	sizes := []int{100000, 1000000, 10000000}
 
 	for _, size := range sizes {
 		t.Run(fmt.Sprintf("Size_%d", size), func(t *testing.T) {
