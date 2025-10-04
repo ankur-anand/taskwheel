@@ -11,7 +11,7 @@ A high-performance, generic **Hierarchical Timing Wheel** implementation in Go f
 
 When you need to manage thousands or millions or timers (timeouts, TTLs, scheduled tasks) etc. While Go's standard `time.Timer` is excellent, it faces some challenges at high volumes.
 
-## 🧩 Use Case: Expiring 10 Million Cache Keys Efficiently
+## Use Case: Expiring 10 Million Cache Keys Efficiently
 
 Traditional cache cleanup scans every key (`O(n)`), which works fine at small scale —  
 but completely breaks down once you hit **millions** of entries.
