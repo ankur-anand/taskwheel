@@ -13,20 +13,18 @@ When you need to manage thousands or millions or timers (timeouts, TTLs, schedul
 
 ## Use Case: Expiring 10 Million Cache Keys Efficiently
 
-Traditional cache cleanup scans every key (`O(n)`), which works fine at small scale —  
-but completely breaks down once you hit **millions** of entries.
+Traditional cache cleanup scans every key (`O(n)`), which works fine at small scale — but completely breaks down once you hit **millions** of entries.
 
-Using a **Timing Wheel**, expiration becomes `O(1)` per tick —  
-processing *only* the keys that are actually due right now.
-# Read Stall Comparison (10 Million Keys)
+Using a **Timing Wheel**, expiration becomes `O(1)` per tick — processing *only* the keys that are actually due right now.
+
+### Read Stall Comparison (10 Million Keys)
 
 |**Metric**|**Naive Scan**|**Timing Wheel**|
 |:-|:-|:-|
 |**Avg Read Latency**|4.68 ms|**3.15 µs**|
 |**Max Read Stall**|500 ms|**≈ 2 ms**|
 
-At **10 million keys**, a naive cleanup can stall reads for seconds —  
-while the **Timing Wheel** glides through them *in microseconds*.
+At **10 million keys**, a naive cleanup can stall reads for seconds — while the **Timing Wheel** glides through them *in microseconds*.
 
 **Read the full story on Medium:**  
 [Killing O(n): How Timing Wheels Expire 10 Million Keys Effortlessly in Golang](https://medium.com/@ankur_anand/killing-o-n-how-timing-wheels-expire-10-million-keys-effortlessly-in-golang-9a6b8709fd91)
