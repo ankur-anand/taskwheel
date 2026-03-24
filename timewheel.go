@@ -43,6 +43,7 @@ type Timer[T any] struct {
 
 type slotList[T any] struct {
 	head, tail *Timer[T]
+	len        int
 }
 
 func (sl *slotList[T]) push(t *Timer[T]) {
@@ -54,6 +55,7 @@ func (sl *slotList[T]) push(t *Timer[T]) {
 		sl.tail.next = t
 	}
 	sl.tail = t
+	sl.len++
 }
 
 func (sl *slotList[T]) remove(t *Timer[T]) {
@@ -74,6 +76,7 @@ func (sl *slotList[T]) remove(t *Timer[T]) {
 
 	t.next = nil
 	t.prev = nil
+	sl.len--
 }
 
 func (sl *slotList[T]) front() *Timer[T] {
@@ -176,7 +179,7 @@ func (tw *TimingWheel[T]) Tick() []*Timer[T] {
 
 	tw.currentSlot = (tw.currentSlot + 1) % tw.numSlots
 	slotList := &tw.slots[tw.currentSlot]
-	var dueTimers []*Timer[T]
+	dueTimers := make([]*Timer[T], 0, slotList.len)
 
 	for t := slotList.front(); t != nil; {
 		next := t.next
