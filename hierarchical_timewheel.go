@@ -11,6 +11,7 @@ import (
 type HierarchicalTimingWheel[T any] struct {
 	mu        sync.Mutex
 	levels    []*TimingWheel[T]
+	timerMap  map[TimerID]*Timer[T]
 	intervals []time.Duration
 	maxSpans  []time.Duration
 	numLevels int
@@ -46,7 +47,7 @@ func NewHierarchicalTimingWheel[T any](intervals []time.Duration, slots []int) *
 		if slots[i] > 65535 {
 			panic(fmt.Sprintf("slots[%d] must be <= 65535", i))
 		}
-		levels[i] = NewTimingWheel[T](intervals[i], slots[i], i)
+		levels[i] = newTimingWheel[T](intervals[i], slots[i], i, false)
 		span := time.Duration(slots[i]) * intervals[i]
 		sum += span
 		maxSpans = append(maxSpans, sum)
@@ -54,6 +55,7 @@ func NewHierarchicalTimingWheel[T any](intervals []time.Duration, slots []int) *
 
 	return &HierarchicalTimingWheel[T]{
 		levels:    levels,
+		timerMap:  make(map[TimerID]*Timer[T]),
 		intervals: intervals,
 		maxSpans:  maxSpans,
 		numLevels: len(levels),
@@ -83,7 +85,7 @@ func (htw *HierarchicalTimingWheel[T]) AfterTimeout(id TimerID, value T, timeout
 
 	tw := htw.levels[level]
 	tw.slots[slot].push(timer)
-	tw.timerMap[id] = timer
+	htw.timerMap[id] = timer
 	return timer, nil
 }
 
@@ -95,37 +97,28 @@ func (htw *HierarchicalTimingWheel[T]) Remove(id TimerID) bool {
 }
 
 func (htw *HierarchicalTimingWheel[T]) remove(id TimerID) bool {
-	for _, tw := range htw.levels {
-		if t, ok := tw.timerMap[id]; ok {
-			tw.slots[t.slot].remove(t)
-			delete(tw.timerMap, id)
-			return true
-		}
+	t, ok := htw.timerMap[id]
+	if !ok {
+		return false
 	}
-	return false
+	htw.levels[t.level].slots[t.slot].remove(t)
+	delete(htw.timerMap, id)
+	return true
 }
 
 // Len returns the total number of timers currently active in hierarchical timing wheel.
 func (htw *HierarchicalTimingWheel[T]) Len() int {
 	htw.mu.Lock()
 	defer htw.mu.Unlock()
-	sum := 0
-	for _, tw := range htw.levels {
-		sum += len(tw.timerMap)
-	}
-	return sum
+	return len(htw.timerMap)
 }
 
 // Get returns the timer with the provided ID from the hierarchical timing wheel, if present.
 func (htw *HierarchicalTimingWheel[T]) Get(id TimerID) (*Timer[T], bool) {
 	htw.mu.Lock()
 	defer htw.mu.Unlock()
-	for _, tw := range htw.levels {
-		if t, ok := tw.timerMap[id]; ok {
-			return t, true
-		}
-	}
-	return nil, false
+	t, ok := htw.timerMap[id]
+	return t, ok
 }
 
 // Tick advances the hierarchical timing wheel by one slot at each level.
@@ -149,8 +142,8 @@ func (htw *HierarchicalTimingWheel[T]) Tick() []*Timer[T] {
 		for t := slotList.front(); t != nil; {
 			next := t.next
 			slotList.remove(t)
-			delete(tw.timerMap, t.ID)
 			if i == 0 {
+				delete(htw.timerMap, t.ID)
 				due = append(due, t)
 			} else {
 				// down to the right slot of the next lower level.
@@ -159,7 +152,6 @@ func (htw *HierarchicalTimingWheel[T]) Tick() []*Timer[T] {
 				level, slot, _ := htw.calcPlacement(remaining, time.Now())
 				t.level, t.slot = uint8(level), uint16(slot)
 				htw.levels[level].slots[slot].push(t)
-				htw.levels[level].timerMap[t.ID] = t
 			}
 			t = next
 		}
@@ -322,7 +314,7 @@ func (htw *HierarchicalTimingWheel[T]) Drain() []*Timer[T] {
 			for t := tw.slots[i].front(); t != nil; {
 				next := t.next
 				tw.slots[i].remove(t)
-				delete(tw.timerMap, t.ID)
+				delete(htw.timerMap, t.ID)
 				timers = append(timers, t)
 				t = next
 			}
@@ -343,9 +335,9 @@ func (htw *HierarchicalTimingWheel[T]) Reset() {
 				t = next
 			}
 		}
-		tw.timerMap = make(map[TimerID]*Timer[T])
 		tw.currentSlot = 0
 	}
+	htw.timerMap = make(map[TimerID]*Timer[T])
 }
 
 // Pause move the hierarchical timing wheel into the Paused state.
