@@ -97,15 +97,23 @@ type TimingWheel[T any] struct {
 
 // NewTimingWheel creates a new TimingWheel with the given interval and number of slots.
 func NewTimingWheel[T any](interval time.Duration, numSlots, level int) *TimingWheel[T] {
+	return newTimingWheel[T](interval, numSlots, level, true)
+}
+
+func newTimingWheel[T any](interval time.Duration, numSlots, level int, withTimerMap bool) *TimingWheel[T] {
 	slots := make([]slotList[T], numSlots)
+	var timerMap map[TimerID]*Timer[T]
+	if withTimerMap {
+		timerMap = make(map[TimerID]*Timer[T])
+	}
 	return &TimingWheel[T]{
 		interval:    interval,
 		numSlots:    numSlots,
 		slots:       slots,
 		currentSlot: 0,
-		level:       0,
+		level:       level,
 		state:       WheelActive,
-		timerMap:    make(map[TimerID]*Timer[T]),
+		timerMap:    timerMap,
 	}
 }
 
